@@ -166,6 +166,69 @@ int eclfio_get( FILE*, const char* opts, int32_t* recordsize, void* record );
  */
 int eclfio_put( FILE*, const char* opts, int nmemb, const void* );
 
+/*
+ * By default, eclipse writes arrays in blocks of N elements, that is, a 5000
+ * element integer array is written in e.g. 5 blocks of 1000 elements each, but
+ * considered the same logical vector spanning multiple physical fortran
+ * blocks.
+ *
+ * The eclfio_get/put functions has no such behavorial restriction, and
+ * happily writes longer arrays in a single physical block.
+ *
+ * To automate handling arrays spanning multiple physical blocks, use
+ * eclfio_array_get/put. The ecl_default_blocksize function returns a blocksize
+ * compatible with eclipse's default sizes.
+ *
+ * ecl_default_blocksize expects one of the values in ecl_default_blocksizes
+ * enum, otherwise a negative value is returned.
+ */
+#define ECL_DEFAULT_BLOCKSIZE_NUMERIC 1000
+#define ECL_DEFAULT_BLOCKSIZE_STRING  105
+int ecl_default_blocksize( int );
+
+/*
+ * eclfio_array_get/put behave differently w.r.t. errors than their simpler
+ * relatives eclfio_get/put.
+ *
+ * When an operation cannot be successfully completed, eclfio_array does *not*
+ * roll back the file pointer to where it was before the call; rather, it rolls
+ * back to the physical the failure occured in. It is essentially repeated
+ * calls to eclfio_get/put.
+ *
+ * The blocksize argument should almost always be a value returned from
+ * ecl_default_blocksize.
+ *
+ * These functions can return anything eclfio_get/put returns.
+ *
+ * eclfio_array_get expects that the underlying physical blocks maps to the
+ * size of the array. Assuming an array of 3200 elements:
+ *
+ * |1000|1000|1000|200|
+ *
+ * If the last block is anything but 200 elements, this function returns an
+ * error.
+ *
+ * The len argument is how many individual values one element (nmemb) consists
+ * of. This is most useful for strings (CNNN), and should otherwise be 1.
+ */
+
+int eclfio_array_get( FILE*,
+                      const char* opts,
+                      int len,
+                      int nmemb,
+                      void* array );
+int eclfio_array_put( FILE*,
+                      const char* opts,
+                      int len,
+                      int nmemb,
+                      int blocksize,
+                      const void* );
+
+enum ecl_default_blocksizes {
+    ECL_BLOCKSIZE_NUMERIC = 0,
+    ECL_BLOCKSIZE_STRING  = 1,
+};
+
 enum ecl_errno {
     ECL_OK = 0,
     ECL_ERR_UNKNOWN,

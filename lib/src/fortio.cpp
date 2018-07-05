@@ -409,3 +409,67 @@ int eclfio_put( std::FILE* fp,
 } catch( std::exception& ) {
     return ECL_ERR_SEEK;
 }
+
+int ecl_default_blocksize( int type ) {
+    switch( type ) {
+        case ECL_BLOCKSIZE_NUMERIC: return ECL_DEFAULT_BLOCKSIZE_NUMERIC;
+        case ECL_BLOCKSIZE_STRING:  return ECL_DEFAULT_BLOCKSIZE_STRING;
+        default:                    return -1;
+    }
+}
+
+int eclfio_array_get( std::FILE* fp,
+                      const char* opts,
+                      int len,
+                      int nmemb,
+                      void* array ) {
+
+    if( nmemb < 0 ) return ECL_EINVAL;
+
+    if( len < 1 ) len = 1;
+
+    const auto size = parse_opts( opts ).elemsize;
+
+    auto* dst = static_cast< char* >( array );
+    while( nmemb > 0 ) {
+        std::int32_t items = nmemb;
+        const auto err = eclfio_get( fp, opts, &items, dst );
+        if( err ) return err;
+
+        // TODO: Is this really the right error code?
+        if( items % len != 0 ) return ECL_INVALID_RECORD;
+
+        nmemb -= items / len;
+        if( dst ) dst += size * items;
+    }
+
+    // TODO: is this the right error code? maybe reserve INVALID_RECORD for
+    // blocked operations, and use INVALID_BLOCK for direct eclfio_get
+    if( nmemb < 0 ) return ECL_INVALID_RECORD;
+
+    return ECL_OK;
+}
+
+int eclfio_array_put( std::FILE* fp,
+                      const char* opts,
+                      int len,
+                      int nmemb,
+                      int blocksize,
+                      const void* array ) {
+
+    if( nmemb < 0 ) return ECL_EINVAL;
+
+    const auto size = parse_opts( opts ).elemsize;
+
+    auto* src = static_cast< const char* >( array );
+    while( nmemb > 0 ) {
+        const auto items = std::min( nmemb, blocksize );
+        const auto err = eclfio_put( fp, opts, len * items, src );
+        if( err ) return err;
+
+        nmemb -= items;
+        if( src ) src += size * len * items;
+    }
+
+    return ECL_OK;
+}
