@@ -244,6 +244,8 @@ enum ecl_errno {
     ECL_INVALID_RECORD,
     ECL_EINVAL,
     ECL_INCONSISTENT_STATE,
+    ECL_EOF,
+    ECL_UNEXPECTED_EOF,
 };
 
 #ifdef __cplusplus

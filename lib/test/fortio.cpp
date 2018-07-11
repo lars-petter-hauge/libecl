@@ -40,17 +40,57 @@ TEST_CASE("records with broken tail can be read", "[fortio][f77]") {
     REQUIRE_THAT( elems, FwriteCount( src.size() ) );
 
     std::int32_t size = src.size();
+    
+    SECTION( "missing tail" ) {
 
-    for( bool write_tail : { true, false } ) SECTION(
-          write_tail
-        ? "tail is valid, but mismatch with head"
-        : "tail is missing" ) {
+        SECTION("querying size is not affected") {
+            std::rewind( fp );
 
-        if( write_tail ) {
-            auto tail = head + 1;
-            auto elems = std::fwrite( &tail, sizeof( head ), 1, fp );
-            REQUIRE_THAT( elems, FwriteCount( 1 ) );
+            Err err = eclfio_sizeof( fp, "e", &size );
+            CHECK( err == Err::ok() );
+            CHECK( size == 10 );
         }
+
+        SECTION("failure with strict read") {
+            std::rewind( fp );
+            auto out = src;
+            const auto pos = std::ftell( fp );
+
+            Err err = eclfio_get( fp, "e", &size, out.data() );
+            CHECK( err == Err::unexpected_eof() );
+            CHECK( size == 10 );
+            CHECK( pos == std::ftell( fp ) );
+        }
+
+        SECTION("success with allow-notail ($)") {
+            std::rewind( fp );
+            auto out = src;
+            const auto pos = std::ftell( fp );
+
+            Err err = eclfio_get( fp, "e$", &size, out.data() );
+            CHECK( err == Err::ok() );
+            CHECK( size == 10 );
+            CHECK( pos < std::ftell( fp ) );
+            CHECK_THAT( out, Equals( src ) );
+        }
+
+        SECTION("success with force-notail (~)") {
+            std::rewind( fp );
+            auto out = src;
+            const auto pos = std::ftell( fp );
+
+            Err err = eclfio_get( fp, "e~", &size, out.data() );
+            CHECK( err == Err::ok() );
+            CHECK( size == 10 );
+            CHECK( pos < std::ftell( fp ) );
+            CHECK_THAT( out, Equals( src ) );
+        }
+    }
+
+    SECTION( "mismatching between head and tail" ) {
+        auto tail = head + 1;
+        auto elems = std::fwrite( &tail, sizeof( head ), 1, fp );
+        REQUIRE_THAT( elems, FwriteCount( 1 ) );
 
         SECTION("querying size is not affected") {
             std::rewind( fp );
@@ -97,7 +137,7 @@ TEST_CASE("records with broken tail can be read", "[fortio][f77]") {
     }
 }
 
-TEST_CASE("record with valid, but wrong head", "[fortio][f77]") {
+TEST_CASE("record with valid, but too small body", "[fortio][f77]") {
     ufile handle( std::tmpfile() );
     REQUIRE( handle );
     auto* fp = handle.get();
@@ -117,7 +157,7 @@ TEST_CASE("record with valid, but wrong head", "[fortio][f77]") {
     std::int32_t size = out.size();
     Err err = eclfio_get( fp, "e", &size, out.data() );
 
-    CHECK( err == Err::read() );
+    CHECK( err == Err::unexpected_eof() );
     CHECK( pos == std::ftell( fp ) );
     CHECK( size == out.size() );
 }
