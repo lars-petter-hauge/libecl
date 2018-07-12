@@ -459,6 +459,7 @@ int eclfio_array_get( std::FILE* fp,
                       const char* opts,
                       int len,
                       int nmemb,
+                      std::int32_t blocksize,
                       void* array ) {
 
     if( nmemb < 0 ) return ECL_EINVAL;
@@ -469,20 +470,28 @@ int eclfio_array_get( std::FILE* fp,
 
     auto* dst = static_cast< char* >( array );
     while( nmemb > 0 ) {
-        std::int32_t items = nmemb;
+        std::int32_t items = std::min( nmemb, blocksize );
         const auto err = eclfio_get( fp, opts, &items, dst );
         if( err ) return err;
 
-        // TODO: Is this really the right error code?
-        if( items % len != 0 ) return ECL_INVALID_RECORD;
+        // if an inner block, and the elements don't fill the full block,
+        // it's an underflow - only the last block is allowed to be different
+        // from blocksize
+        if( items < blocksize && items != nmemb )
+            return ECL_EINVAL;
+
+        /*
+         * the number of items has to be consistent with the length of each
+         * element - most items should have elem-length 1, but CNNN strings
+         * have length of 1..999.
+         */
+        if( items % len != 0 ) return ECL_TRUNCATED;
 
         nmemb -= items / len;
         if( dst ) dst += size * items;
     }
 
-    // TODO: is this the right error code? maybe reserve INVALID_RECORD for
-    // blocked operations, and use INVALID_BLOCK for direct eclfio_get
-    if( nmemb < 0 ) return ECL_INVALID_RECORD;
+    if( nmemb < 0 ) return ECL_UNALIGNED_ARRAY;
 
     return ECL_OK;
 }

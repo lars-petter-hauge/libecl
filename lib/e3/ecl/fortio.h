@@ -262,6 +262,7 @@ int eclfio_array_get( FILE*,
                       const char* opts,
                       int len,
                       int nmemb,
+                      int32_t blocksize,
                       void* array );
 int eclfio_array_put( FILE*,
                       const char* opts,
@@ -271,8 +272,10 @@ int eclfio_array_put( FILE*,
                       const void* );
 
 enum ecl_default_blocksizes {
-    ECL_BLOCKSIZE_NUMERIC = 0,
-    ECL_BLOCKSIZE_STRING  = 1,
+    ECL_BLOCKSIZE_IGNORE  = -1,
+    ECL_BLOCKSIZE_INFER   = 0,
+    ECL_BLOCKSIZE_NUMERIC = 1,
+    ECL_BLOCKSIZE_STRING  = 2,
 };
 
 enum ecl_errno {
@@ -286,6 +289,8 @@ enum ecl_errno {
     ECL_INCONSISTENT_STATE,
     ECL_EOF,
     ECL_UNEXPECTED_EOF,
+    ECL_UNALIGNED_ARRAY,
+    ECL_TRUNCATED,
 };
 
 #ifdef __cplusplus
