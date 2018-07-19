@@ -366,3 +366,115 @@ TEST_CASE("unexpected EOF in block body", "[fortio][f77]") {
         CHECK( size == 16 );
     }
 }
+
+TEST_CASE( "record with empty body can be read", "[fortio][f77]" ) {
+    ufile handle( std::tmpfile() );
+    REQUIRE( handle );
+    auto* fp = handle.get();
+
+    const std::vector< std::int32_t > src( 0, 0 );
+    Err err = eclfio_put( fp, "", 0, src.data() );
+    CHECK( err == Err::ok() );
+
+    std::rewind( fp );
+
+    SECTION ("with eclfio_array_get") {
+        Err err = eclfio_array_get(fp, "", 1, 0, 1000, nullptr);
+
+        CHECK( err == Err::ok() );
+        CHECK( std::ftell(fp) > 0 );
+    }
+
+    SECTION ("with eclfio_get") {
+        std::int32_t size = -1;
+        Err err = eclfio_get( fp, "", &size, nullptr );
+
+        CHECK( err == Err::ok() );
+        CHECK( std::ftell(fp) > 0 );
+        CHECK( size == 0 );
+    }
+}
+
+TEST_CASE( "inconsistent length fails", "[fortio][f77]" ) {
+    ufile handle( std::tmpfile() );
+    REQUIRE( handle );
+    auto* fp = handle.get();
+
+    const std::string src = "FOPT    STEP    DATE";
+    Err err = eclfio_put( fp, "b", 20, src.data() );
+    CHECK( err == Err::ok() );
+
+    std::rewind( fp );
+
+    char out[24] = {};
+    /*
+     * The array (src) written to disk represents two properly written
+     * elements and a last that is too short.
+     * Trying to read three elements of size eight from a record of size 20
+     * fails with a truncation error
+    */
+    err = eclfio_array_get( fp, "b", 8, 3, 105, out);
+
+    CHECK( err == Err::truncated() );
+}
+
+TEST_CASE( "last block contains too many elements", "[fortio][f77]" ) {
+    ufile handle( std::tmpfile() );
+    REQUIRE( handle );
+    auto* fp = handle.get();
+
+    const std::vector< std::int32_t > src( 3, 1 );
+    Err err (0);
+    for ( int i = 0; i < 4; i++ ){
+        err = eclfio_put( fp, "", 3, src.data() );
+        CHECK( err == Err::ok() );
+    }
+
+    std::rewind( fp );
+    std::vector< int32_t > out( 15, 0 );
+    err = eclfio_array_get( fp, "", 1, 10, 3, out.data() );
+
+    CHECK( err == Err::unaligned() );
+    /*
+     * The fourth eclfio_get fails, thus placing the file pointer
+     * at the beginning of said record.
+    */
+    long int fp_end = std::ftell( fp );
+    std::rewind( fp );
+
+    std::int32_t size = -1;
+    for ( int i = 0; i < 3; i++ ){
+        err = eclfio_get( fp, "", &size, nullptr );
+        CHECK( err == Err::ok() );
+    }
+
+    CHECK( std::ftell( fp ) == fp_end );
+}
+
+TEST_CASE( "reading record with smaller inner block", "[fortio][f77]" ) {
+    ufile handle( std::tmpfile() );
+    REQUIRE( handle );
+    auto* fp = handle.get();
+
+    const std::vector< std::int32_t > src( 3, 1 );
+    std::vector< int32_t > out( 15, 0 );
+    std::vector< int32_t > n_elems = {3, 2, 3};
+
+    Err err (0);
+    for (int n : n_elems ) {
+        err = eclfio_put( fp, "", n, src.data() );
+        CHECK( err == Err::ok() );
+    }
+
+    std::rewind( fp );
+
+    SECTION( "will fail" ) {
+        err = eclfio_array_get( fp, "", 1, 9, 3, out.data() );
+        CHECK( err == Err::unaligned() );
+    }
+
+    SECTION( "succeeds when underflow is allowed" ) {
+        err = eclfio_array_get( fp, "", 1, 8, 0, out.data() );
+        CHECK( err == Err::ok() );
+    }
+}
