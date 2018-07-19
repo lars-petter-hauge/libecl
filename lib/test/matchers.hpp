@@ -48,6 +48,8 @@ struct Err {
     static Err read()              { return ECL_ERR_READ; }
     static Err eof()               { return ECL_EOF; }
     static Err unexpected_eof()    { return ECL_UNEXPECTED_EOF; }
+    static Err truncated()         { return ECL_TRUNCATED; }
+    static Err unaligned()         { return ECL_UNALIGNED_ARRAY; }
 
     int expected;
 };
@@ -67,6 +69,8 @@ struct StringMaker< Err > {
             case ECL_INCONSISTENT_STATE:    return "INCONSISTENT STATE";
             case ECL_EOF:                   return "EOF";
             case ECL_UNEXPECTED_EOF:        return "UNEXPECTED EOF";
+            case ECL_TRUNCATED:             return "TRUNCATED";
+            case ECL_UNALIGNED_ARRAY:       return "UNALIGNED_ARRAY";
         }
 
         return "Unknown error";
